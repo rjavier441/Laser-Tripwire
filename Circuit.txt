@@ -1,0 +1,213 @@
+/*
+SJSU SCE Summer Internship Project - AI (Agents of Implementation)
+Laser Trip Wire Security System V2 - Rolando Javier, Hamir Mahal,
+                                     Ronald Cheng
+                         
+                                     ***created 7/7/14***
+                                     ***last updated 7/13/14***
+                                  
+Saved in
+C:\Users\rjavi_000\Saved Games\Programming Software\Arduino C++\arduino-1.0.5
+
+Description:  A photoresistor is used as a means to detect light from an IR laser.
+              The program calculates the average IR light and sets a threshold for 
+              when the laser is tripped. Then when the detected lighht is below
+              the threshold, the laser is tripped, and then a function sends a
+              command to a server that will send email notifications and possibly
+              a series of camera photos taken by a security camera to club executives
+              regarding the break-in.
+              
+              **Future Addition: allow arduino board to communicate via bluetooth
+              with a transceiver connected to a computer. It will send commands to a
+              camera to take photos, then command a computer to send the photos and
+              security messages to SCE executives, and finally timestamp the occurrence
+              with MySQL. Research these topics**
+              
+List of Input Commands:    A.)  AutoArming Functionality
+                                                            Ex:  "set-armtime-start:2200" //set-alarm-start = commandWord; 2200 = receivedValue (in military time); **DONT PUT SPACES**
+                              1.)  set-armtime-start  <---  sets the starting time for auto arming the alarm
+                              2.)  set-armtime-end    <---  sets the ending time for auto arming the alarm
+                              3.)  :                <---  signifies end of command word
+                              4.)  0000 - 2359      <---  valid time values (Ex: 0000 = 12:00AM, 2359 = 11:59PM, 1326 = 1:26PM, 1200 = noon, etc.)
+                           B.)  AutoArming Timekeeping
+                              1.)  time-now  <---  sets currentTime to the following value (Ex:  "time-now:12:34:56")
+                           C.)  Console Text (not essential; for reference; will be commented out in final version; via bluetooth, type these via a console/terminal program)
+                              1.)  print-commands       <---  prints a list of valid commands
+                              2.)  reset                <---  clears the commandWord; use in case the console gets too messy.
+                              3.)  time-now             <---  same exact command as above.
+                              4.)  set-armtime-start    <---  same as above.
+                              5.)  set-armtime-end      <---  same as above.
+                           D.)  General Commands
+                              1.)  modeChange        <---  allows user to remotely change the currentState (Mode) of the system. 
+                                                           NOTE: if currentTime is within the threshold for auto arming, this command is overridden. Autoarming time takes 
+                                                           first priority. Format for this command = "modeChange:n" (ignore the quotations), where 'n' is anywhere from 1 to 4.
+                                                           
+                              
+List of Output Commands:   A.)  Laser Trip
+                              1.)  laser-tripped-demo   <---  sends notice that laser was tripped while in demo mode (Just for reference; emailMsg will be sent when code's finished)
+                              2.)  laser-tripped-armed  <---  sends notice that laser was tripped while in armed mode
+                              3.)  emailMsg             <---  sends the string following the ':'. Serves as the email message (Ex: emailMsg:'Hello, Testing!') -- Note the single quotes!!!!
+                           B.)  AutoArming Timekeeping
+                              1.)  returnTime           <---  sends request to receive current time (code expects the time in the format HH:MM:SS, will convert to military time)
+                              2.)  returnAutoarm_Time   <---  sends request every once in a while to update the autoarm time.
+
+Updates:      *4/9/14 -- Added Security Feature: If the photoresistor is broken and/or
+                         no longer transmitting any analog value (i.e. analog read value
+                         'sample' == 0, LDR being pulled off), then the alarm emits a sound comparable to that
+                         of a fire alarm. A yellow LED is also Lit up
+              *7/9/14 -- Removed security feature to free up space. 
+                          NOTE: As of now, the memory occupied by the code is 8,166 bytes, or 7.975 KB, which is close to
+                          8kB maximum for the ATMega328/ATMega8 PDIP microcontrollers. You need to streamline the code. 
+                          RECOMMENDATIONS:
+                          1.) Consider Using Pass By Reference instead of Pass By Value for functions
+                          2.) Reduce the number of unnecessary variables (if possible)
+                          3.) Remove any unnecessary code (if any are found)
+                          4.) Consider removing any extraneous features, like the LED indicators (red/yellow)
+                              or even the audio alarm, if not needed
+                          5.) Consider usage of Local variables in contrast to the Global variables present
+              *7/10/14 -- Managed to shave off unnecessary variables, dropping memory size to 8,134 bytes, still too close
+                          to the memory limit. The recommendations still stand.
+              *7/13/14 -- Removed Speaker Alarm Functionality. Managed to drop enough bytes to make the size fall down to 
+                          5,814 bytes (5.678 KB). Now to add the message sending functionality (test it out as a serial
+                          output, for now, though). Also need to figure out how to setup the timing for auto arming.
+              *7/13/14 -- Added in the Message Sending Functionality as part of the armed & demo functions. They are in the
+                          form of serial text (being sent to the serial monitors) for the time being, until the team can
+                          get the bluetooth module working. This grew the memory size to 5,938 bytes (5.938 KB). Just need to
+                          figure out how to make the board keep track of time.
+              *7/17/14 -- Rearranged some sections of code, specifically the Serial.print() lines with the sample, avg, and logic
+                          readings on them, as well as add the current mode to that line. The code got to the point where the demo
+                          and armed fucntions became exactly alike, so I eliminated the demoFunc, leaving the armedFunc as the
+                          standard laser reading function. Also added Mode LED Indicators. Total size now is 6,088 bytes (6.088 KB).
+                          
+                          NOTES:
+                          A $7 RealTimeClock (may need a CMOS Battery(?)) Module for Arduino may solve the timing thing for Auto Mode. 
+                          It will store time and date. Or a message out to the python script to get the real time from the server and
+                          return it to the Arduino (easier method) through the Serial (Connecting the bluetooth module to the
+                          TX and RX pins, and sending commands to it will require nothing more than something like
+                          "Serial.print()" and "Serial.read()", but the "Serial" class (the "Serial" in "Serial.print()") will be 
+                          modified for bluetooth. Also, look up the "Communication Standards" for wireless communication.
+                          
+                          NEW TEAM ASSIGNMENT:
+                          -Hamir: Come up with a table of commands that'll be sent back and forth to the arduino and server via the
+                           python script (ex. Arduino: Tell script to get time and send email, Script: Send time to Arduino
+                           and Write the programming for it).
+                           
+                          -RJ: I come up with a Parser. Write up the code that will be able to send and receive data/commands
+                           via the arduino and bluetooth receiver to Ronald's Python Script. Get an ambient light sensor to
+                           keep track of the light changes in time and change the "light avg" variable accordingly. Also,
+                           make the board's automatic time function programmable (able to change) via user input (like a watch's
+                           time editting buttons) WHILE the entire program is running. You may need to look for libraries that
+                           support the realtime timing functions. Also need a table of commands to be sent and received via the
+                           arduino to python. Also need to add in an ambient light sensor to edit the light "avg" so that ambient
+                           light in the room doesn't mess up the readings as the daytime comes and goes. I also need to write up a
+                           table of commands that I'm programming the board to send off, and also what I'm programming it to receive.
+                           
+                          -Ronald: Develop the python script to communicate with the server (a script, from what I heard, is nothing
+                           more than a set of instructions that the computer will follow. Apparently, once the data is transferred
+                           from Arduino to the master computer/server, the computer/server will consult the script to see what exactly
+                           should be done with the data, which will be a notification that the laser was tripped. For our purposes, 
+                           the script will tell the computer to record the time the laser was tripped and it's mode at that time (both 
+                           to be logged into the MySQL server). Then, the script will command the computer to send emails to the executives
+                           that there was a breach, also with the previously mentioned data. Finally, since the Arduino requires real-time
+                           clocking, the script will command the computer to send the RealTime to the Arduino.
+                           
+                          -ALL: Update Khalil on progress next week Thurs, 7/24/14!
+              *7/18/14 -- Changed Default Case into a Serial.print statement. Also noticed there was a bug a few times before starting the board,
+                          as the mode switch buttons wouldn't switch the modes. Seems to be fine now though. Total size is 5,984 bytes (5.984 KB).
+              *7/19/14 -- Edited the demo and armed cases so that there'd only be one message sent to execs once laser was tripped. In demo,
+                          once laser is tripped, one message command is sent and currentState shifts to disarmed. In armed, laser being tripped
+                          results in one message command being sent and currentState swtiching to automatic. May want to order the Real Time Clock
+                          and buck converter soon; I need to get the timing function working and the parser (code that translates arduino commands
+                          into python script commands(?))up and runnning. Current size is 6,008 bytes (6.008 KB).
+              *7/22/14 -- Reinitiated the call for varA to be the analogInput and increased the scope of trigger (by removing the assignments of
+                          trigger within demo/armed states and assigning it outside the switch statement. Added parts to the data retrieval
+                          and parsing code into here, and also tailored the cases to suit the new additions of code. Now the automatic mode will
+                          activate the alarm system while the currentTime is within the time threshold set by startTime and endTime; otherwise it
+                          will switch to disarmed mode. In disarmed mode, if currentTime is within that threshold, it reverts to automode.
+                          Total memory occupancy is 6,576 bytes (6.432 KB, a KB is 1024 bytes).
+              *7/28/14 -- Introduced the unsigned short "counter". Whenever it reaches a certain value, it'll send a command to return the real time from
+                          the computer and reset to 0. This is how I plan to make up for the lack of a real time clock. I also added the code to parse the
+                          current time requested by "returnTime" from HH:MM:SS format to military time values between 0000 and 2359.
+                          Current size is 6,942 bytes (6.806 KB).
+              *7/31/14 -- Added the autonomous updating of the start/end armtimes. Code now asks for them every ~30 mins, and will receive both the set-armtime-
+                          start and set-armtime-end commands and their corresponding values. Current size is 7,004 bytes (~6.846 KB).
+              *8/5/14  -- Just received all the necessary bluetooth components: SoundBot Bluetooth v4 USB dongle (with required drivers), HC-05 bluetooth transceiver,
+                          and PuTTY, an free open-source terminal program to enable communication interfacing (allows me to see what's coming in via a serial screen.
+                          Also replaced all Serial.print commands within switch case loop to Serial.println (prints neater in PuTTY). Now to test the actual code out...
+                          New Code size (with all unnecessary Serial.print and sprintf lines captioned out): 5,042 bytes.
+              *8/6/14  -- Reworked the entire Parsing portion of code within a separate sketch called LaserTripwireV2ParserTestCode (exactly, more or less...). I've
+                          now replaced the old parser with the new one, tested/debugged input/output with bluetooth serial comms, and have now implemented several new 
+                          commands. Now adding a modeChange command and Ambient Light Sensor. Work in progres... Current space occupancy is 6,766 bytes (~6.590 KB).
+                          NOTE: I now need to build the prototype (primarily includes building the laser module, then also getting the mirror/reflective tape)
+                          2 weeks left, make em count!!!!
+              *8/8/14  -- Added in a feature that checks if the value received for current time is valid or not (i.e. 25:00 is not a real value for time!!) Now i need
+                          to: 1.) Build laser module, 2.) get reflective tape, 3.) add the Ambient light sensor. Current size is 6,900 bytes (6.676 KB)
+              *8/9/14  -- Noticed that the Ambient Light Sensor LDR is a bit weird... If I connect it normally (pos. to 5V, then to GND via 10k Ohm resistor, with analog 1
+                          connection in between the resistor and sensor), it senses normally for the first ten seconds or so, then it suddenly jumps to the highest value
+                          (values output is 0 to 1024 in integers), and never descends, not even if i pull out the ALS or its link to 5v. Also, with it connected, connecting
+                          the HC-06 causes the HC-06 VCC cable to heat up, so to avoid breaking the module, I've decided to remove the button functionality and button LED 
+                          indicators because I think that all the connections are drawing too much current from the arduino. Hope this works...
+                          NOTE:  I looked online that the 10k resistance was too small, so i replaced the 10k with a 200k ohm resistance. It works fine with the HC-06 connected,
+                          now. Haven't added the buttons/indicators back, though, so I won't know if it'll work well with those attached... Also, its current range of values (around
+                          5:30 pm, range from 960 to 1018, which are pretty high given that there isn't much brightness at this time. Consider using a higher pulldown resistance, even
+                          higher than 200k. However, due to the previous debacle, it seems both the HC-06 and ATMEGA 328P have died. I have a spare Atmega, but will need to order a new 
+                          HC-06. For now, I will refrain from having the ambient light sensor working. Current size is 6,842 bytes.
+              *8/11/14 -- Discovered that the erratic fluctuations between disarmed and auto mode was due to a logical error in the code, not because the original ATMega was broken
+                          (although I'm still not entirely sure that it's not broken), primarily in the > and < conditions of the mode switching between disarmed and auto. I managed
+                          to restore it by copying the conditions from a previous backup of the code. However, I found a fatal flaw in the conditions: This code was meant to be used
+                          for times late at night and early in the morning. The method used to compare currentTime, startTime, and endTime only permits having arm and disarm times at
+                          opposite ends of the day. For example, it may only be armed late night and disarmed early morning, not armed at 12pm and disarmed at 1pm, etc. I need to rework
+                          the time comparator so that it can work for ALL  values of time, ASAP!! 2 weeks, make em count!
+              *8/11/14 -- Fixed the LDR. Apparently, no power was going through the power bar of the breadboard. Also, erratic mode switching has occurred again, but it may be because
+                          the board is broken. May neeed new Arduino Uno and Hc-06. Never use the ambient light sensor from radio shack again! Also, I believe it may need replacing
+                          because the detection conditions cause demo mode to stay in demo mode, so i took out the armB/demoB/etc. 'if' conditions. Size is 6,916 bytes.
+              *8/13/14 -- Fixed the timing conditions. Created short night2day to determine whether the starttime going towards the endtime would entail a change in late PM to early AM.
+                          Therefore, different situations would consider different conditions in regards to time value comparison. You can now start alarm at any time and end it at any time
+                          and the alarm can function within any set time frame. Note: 3.3v slot is not functional. Will need to replace arduino uno.
+                          Things to do: 1.) Build laser module, 2.)Buy reflective tape, 3.) Come up with another way to implement an ambient light sensor., 4.) Learn how to wire the 32pu in
+                                        place of the 328p
+
+                          1.5 weeks left, make em count!!! Size is now 7,148 bytes. Will need to upgrade to ATMega32pu(32KB, 40 pins), as Khalil's code for router communication exceeds
+                          8 KB.
+              *8/15/14 -- Created the BreadBoard-Duino, which works perfectly. Now about the 3.3V, i may have to use resistors to get that out of the VCC, or any one of the other digital pins,
+                          since they all output 5v. Now i've commented out anything related to the switch buttons since switching will be done wirelessly. 1 week left, must work hard to 
+                          finish this... Size is 6,758 bytes.
+                          
+                          Things to do:
+                          1.)  Construct IR Laser Module
+                          2.)  RE-implement the Ambient Light Sensor (Try not to draw too much current this time... )
+                          3.)  Wire the arduino 32pu
+                          4.)  test script with pySerial and implement Khalil's Communication code (see email for what to do with router comm)                          
+Circuit:      Connect the LDR (Photoresistor) to 5v directly, and then a 10k resistor
+              in series which routes to ground. In between the LDR and resistor, connect
+              a cable to Analog Input A0.
+              
+              Connect the ALS (Ambient Light Sensor) to 5v directly, then to a 200k resistor
+              routing directly to GND. Between the resistor and the sensor, route a wire to 
+              analog input A5, the 6th analog pin. //This was scrapped, as it seemed to have
+                                                   //drawn excessive current and fried HC06
+              
+              Connect the speaker to digital pin 8 directly with a 230 Ohm resistor, then
+              the other end to ground. **Speaker function removed, see updates**
+              
+              Connect the Red LED to Digital Port 11 (the txPin), then to ground.
+              
+              *4/9/14 -- Connect the Yellow LED to Digital Port 7, then to ground. **Damaged function removed**
+              *7/13/14 -- CONNECT BUTTONS: 
+                          Buttons work on opposite corners, so connect the button to 5V from one
+                          corner, and on the adjacent corner (same side as the power input), attach a 10k ohms resistor to
+                          ground. Then, on the corner opposite the power input (i.e. input==upper left, output==bottom right),
+                          attach a wire leading to the input pin desired (in this code, four buttons are present, connected to
+                          Digital Slots 3,4,5, and 6).
+                          
+                          CONNECT LED INDICATORS:
+                          So far, only demo and armed states use indicators; Attach LEDs to GND with 220 ohms resistors, and
+                          plug in their inputs to ports 8 & 9, respectively.
+              *8/5/14  -- CONNECT HC-06 Bluetooth Transceiver Slave Module:
+                          Connect the VCC pin to Arduino 3.3v, and the GND pin to Arduino GND. Then, connect the module's TX pin
+                          to the Arduino RX pin. Finally, join Arduino TX with module RX via voltage divider (b/c digital pins will
+                          output 5v, ~1.67v above the 3.3v input threshold): To do this, connect Arduino's TX to a 1.2k Ohm resistor.
+                          Then, on one side of the unconnected end of the resistor, connect the module's RX. On the opposite of the resistor
+                          end, place a 2.2k Ohm resistor, which should route directly to GND.
+                          (NOTE: You can substitute the 1.2k with a 10k and the 2.2k with a 20k as an alternative)
+*/
