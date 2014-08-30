@@ -4,7 +4,7 @@ Laser Trip Wire Security System V2 - Rolando Javier, Hamir Mahal,
                                      Ronald Cheng
                          
                                      ***created 7/7/14***
-                                     ***last updated 7/13/14***
+                                     ***last updated 8/15/14***
                                   
 Saved in
 C:\Users\rjavi_000\Saved Games\Programming Software\Arduino C++\arduino-1.0.5
